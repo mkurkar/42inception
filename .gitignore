@@ -1,0 +1,27 @@
+# Secrets - NEVER commit these files
+secrets/
+*.txt
+
+# Environment files with sensitive data
+.env
+
+# Docker volumes and data
+/home/*/data/
+
+# System files
+.DS_Store
+Thumbs.db
+
+# Editor files
+*.swp
+*.swo
+*~
+.vscode/
+.idea/
+
+# Logs
+*.log
+
+# Backup files
+*.bak
+*.backup
