@@ -24,9 +24,79 @@ The entire infrastructure runs in isolated Docker containers with proper network
 
 ## Instructions
 
+### Server Setup (fresh Debian)
+
+If you are starting from a clean Debian installation, run the following steps before cloning the project.
+
+#### 1. Update the system
+
+```bash
+sudo apt-get update && sudo apt-get upgrade -y
+```
+
+#### 2. Install required system packages
+
+```bash
+sudo apt-get install -y \
+    ca-certificates \
+    curl \
+    gnupg \
+    lsb-release \
+    make \
+    git \
+    sudo
+```
+
+#### 3. Install Docker Engine
+
+Add Docker's official GPG key and repository, then install:
+
+```bash
+sudo install -m 0755 -d /etc/apt/keyrings
+curl -fsSL https://download.docker.com/linux/debian/gpg \
+    | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+sudo chmod a+r /etc/apt/keyrings/docker.gpg
+
+echo \
+  "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] \
+  https://download.docker.com/linux/debian \
+  $(lsb_release -cs) stable" \
+  | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+
+sudo apt-get update
+sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+```
+
+#### 4. Allow your user to run Docker without sudo
+
+```bash
+sudo usermod -aG docker $USER
+newgrp docker
+```
+
+Verify Docker is working:
+
+```bash
+docker run --rm hello-world
+```
+
+#### 5. Verify Docker Compose v2
+
+Docker Compose v2 is included with the `docker-compose-plugin` package above. Confirm:
+
+```bash
+docker compose version
+# Expected: Docker Compose version v2.x.x
+```
+
+> **Note:** This project uses `docker compose` (v2, space). The older `docker-compose` (v1, hyphen) is not supported.
+
+---
+
 ### Prerequisites
 
-- Docker and Docker Compose (v2) installed
+- Docker Engine (CE) installed
+- Docker Compose v2 (`docker compose`)
 - Make utility
 - Root/sudo access for creating data directories
 - At least 2GB of free disk space
