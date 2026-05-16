@@ -33,9 +33,11 @@ if [ ! -d "/var/lib/mysql/mysql" ]; then
 
     echo "Configuring database..."
 
-    # FLUSH PRIVILEGES first so grant tables are loaded (required with skip-grant-tables)
+    # With --skip-grant-tables all SQL runs without auth/privilege checks.
+    # Do NOT FLUSH PRIVILEGES before ALTER USER — that would re-enable auth
+    # mid-session and cause subsequent statements to fail.
+    # One FLUSH PRIVILEGES at the very end is sufficient.
     mysql -u root <<-EOSQL
-        FLUSH PRIVILEGES;
         ALTER USER 'root'@'localhost' IDENTIFIED BY '${DB_ROOT_PASSWORD}';
         DELETE FROM mysql.user WHERE User='';
         DELETE FROM mysql.user WHERE User='root' AND Host NOT IN ('localhost', '127.0.0.1', '::1');
