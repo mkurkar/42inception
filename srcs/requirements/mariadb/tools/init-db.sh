@@ -10,27 +10,32 @@ if [ ! -d "/var/lib/mysql/mysql" ]; then
     echo "First run — initialising database..."
     mysql_install_db --user=mysql --datadir=/var/lib/mysql
 
-    # Start MySQL temporarily to configure
-    mysqld --user=mysql --datadir=/var/lib/mysql &
+    # Start MySQL temporarily with no auth and no networking
+    # --skip-grant-tables: bypass all authentication (safe because --skip-networking
+    #   disables TCP so no remote connections are possible during init)
+    mysqld --user=mysql --datadir=/var/lib/mysql \
+           --skip-grant-tables --skip-networking &
     MYSQL_PID=$!
 
-    # Wait for MySQL to be ready
+    # Wait for MySQL to be ready (socket only)
     echo "Waiting for MySQL to start..."
     for i in {30..0}; do
-        if mysqladmin ping &>/dev/null; then
+        if mysqladmin ping --silent; then
             break
         fi
         sleep 1
     done
 
     if [ "$i" = 0 ]; then
-        echo "MySQL failed to start during init"
+        echo "ERROR: MySQL failed to start during initialisation"
         exit 1
     fi
 
     echo "Configuring database..."
 
+    # FLUSH PRIVILEGES first so grant tables are loaded (required with skip-grant-tables)
     mysql -u root <<-EOSQL
+        FLUSH PRIVILEGES;
         ALTER USER 'root'@'localhost' IDENTIFIED BY '${DB_ROOT_PASSWORD}';
         DELETE FROM mysql.user WHERE User='';
         DELETE FROM mysql.user WHERE User='root' AND Host NOT IN ('localhost', '127.0.0.1', '::1');
@@ -44,14 +49,14 @@ EOSQL
 
     echo "Database configured successfully!"
 
-    # Stop temporary MySQL cleanly
-    mysqladmin -u root -p"${DB_ROOT_PASSWORD}" shutdown
-    wait $MYSQL_PID
+    # Shut down the temporary instance
+    kill "${MYSQL_PID}"
+    wait "${MYSQL_PID}" 2>/dev/null || true
     echo "Init complete."
 else
     echo "Database already initialised — skipping configuration."
 fi
 
-# Start MariaDB in the foreground (PID 1)
+# Start MariaDB in the foreground as PID 1
 echo "Starting MariaDB..."
 exec mysqld --user=mysql --datadir=/var/lib/mysql
