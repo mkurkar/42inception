@@ -47,27 +47,60 @@ sudo apt-get install -y \
     sudo
 ```
 
-#### 3. Install Docker Engine
+#### 3. Remove any conflicting Docker packages
 
-Add Docker's official GPG key and repository, then install:
+Debian may ship unofficial Docker packages that conflict with the official ones:
+
+```bash
+sudo apt remove $(dpkg --get-selections \
+    docker.io docker-compose docker-doc podman-docker containerd runc \
+    2>/dev/null | cut -f1) 2>/dev/null || true
+```
+
+#### 4. Install Docker Engine (official apt repository)
+
+Add Docker's official GPG key:
 
 ```bash
 sudo install -m 0755 -d /etc/apt/keyrings
-curl -fsSL https://download.docker.com/linux/debian/gpg \
-    | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
-sudo chmod a+r /etc/apt/keyrings/docker.gpg
-
-echo \
-  "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] \
-  https://download.docker.com/linux/debian \
-  $(lsb_release -cs) stable" \
-  | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
-
-sudo apt-get update
-sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+sudo curl -fsSL https://download.docker.com/linux/debian/gpg \
+    -o /etc/apt/keyrings/docker.asc
+sudo chmod a+r /etc/apt/keyrings/docker.asc
 ```
 
-#### 4. Allow your user to run Docker without sudo
+Add the Docker apt repository (DEB822 format):
+
+```bash
+sudo tee /etc/apt/sources.list.d/docker.sources <<EOF
+Types: deb
+URIs: https://download.docker.com/linux/debian
+Suites: $(. /etc/os-release && echo "$VERSION_CODENAME")
+Components: stable
+Architectures: $(dpkg --print-architecture)
+Signed-By: /etc/apt/keyrings/docker.asc
+EOF
+
+sudo apt-get update
+```
+
+Install Docker Engine and Docker Compose plugin:
+
+```bash
+sudo apt-get install -y \
+    docker-ce \
+    docker-ce-cli \
+    containerd.io \
+    docker-buildx-plugin \
+    docker-compose-plugin
+```
+
+Enable and start Docker:
+
+```bash
+sudo systemctl enable --now docker
+```
+
+#### 5. Allow your user to run Docker without sudo
 
 ```bash
 sudo usermod -aG docker $USER
@@ -80,9 +113,7 @@ Verify Docker is working:
 docker run --rm hello-world
 ```
 
-#### 5. Verify Docker Compose v2
-
-Docker Compose v2 is included with the `docker-compose-plugin` package above. Confirm:
+#### 6. Verify Docker Compose v2
 
 ```bash
 docker compose version
