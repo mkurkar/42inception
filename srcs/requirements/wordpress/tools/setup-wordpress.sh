@@ -1,8 +1,10 @@
 #!/bin/bash
 set -e
 
-# Read database password from secret
+# Read passwords from secrets
 DB_PASSWORD=$(cat /run/secrets/db_password)
+WP_ADMIN_PASSWORD=$(cat /run/secrets/wp_admin_password)
+WP_USER_PASSWORD=$(cat /run/secrets/wp_user_password)
 
 # Wait for MariaDB to be ready
 echo "Waiting for MariaDB to be ready..."
