@@ -25,11 +25,24 @@ Install the required software:
 # Update system
 sudo apt-get update
 
-# Install Docker
-sudo apt-get install -y docker.io
+# Install Docker Engine (official repo)
+sudo apt-get install -y ca-certificates curl gnupg
+sudo install -m 0755 -d /etc/apt/keyrings
+curl -fsSL https://download.docker.com/linux/debian/gpg \
+  | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+sudo chmod a+r /etc/apt/keyrings/docker.gpg
 
-# Install Docker Compose
-sudo apt-get install -y docker-compose
+echo \
+  "Types: deb
+URIs: https://download.docker.com/linux/debian
+Suites: $(. /etc/os-release && echo "$VERSION_CODENAME")
+Components: stable
+Signed-By: /etc/apt/keyrings/docker.gpg" \
+  | sudo tee /etc/apt/sources.list.d/docker.sources
+
+sudo apt-get update
+sudo apt-get install -y docker-ce docker-ce-cli containerd.io \
+    docker-buildx-plugin docker-compose-plugin
 
 # Add user to docker group (optional, to avoid using sudo)
 sudo usermod -aG docker $USER
@@ -37,7 +50,7 @@ newgrp docker
 
 # Verify installations
 docker --version
-docker-compose --version
+docker compose version
 ```
 
 ### Clone and Setup
@@ -164,12 +177,17 @@ This command:
 ### Initial Container Startup
 
 **MariaDB Container:**
-1. Checks if database is initialized
-2. If not, runs `mysql_install_db`
-3. Starts MySQL temporarily
-4. Runs configuration SQL commands
-5. Creates database and user
-6. Restarts MySQL in foreground
+1. Checks if `/var/lib/mysql/mysql` exists (first-run detection)
+2. If not, runs `mysql_install_db --auth-root-authentication-method=normal`
+   (sets root auth to `mysql_native_password` with empty password — no `--skip-grant-tables`)
+3. Starts `mysqld --skip-networking` temporarily for init SQL
+4. Connects as root with no password, creates database and user, sets root password
+5. Shuts down temp instance, starts `mysqld` in foreground
+
+**Note on Dockerfile:** `apt-get install mariadb-server` runs `mysql_install_db` during
+package installation, seeding `/var/lib/mysql` in the image layer. The Dockerfile explicitly
+runs `rm -rf /var/lib/mysql/*` after install so the named volume is not pre-seeded with
+stale data on first mount.
 
 **WordPress Container:**
 1. Waits for MariaDB to be accessible
@@ -219,25 +237,25 @@ docker logs --tail 100 <container_name>
 
 ```bash
 # View service status
-docker-compose -f srcs/docker-compose.yml ps
+docker compose -f srcs/docker-compose.yml ps
 
 # Start specific service
-docker-compose -f srcs/docker-compose.yml start <service_name>
+docker compose -f srcs/docker-compose.yml start <service_name>
 
 # Stop specific service
-docker-compose -f srcs/docker-compose.yml stop <service_name>
+docker compose -f srcs/docker-compose.yml stop <service_name>
 
 # Restart specific service
-docker-compose -f srcs/docker-compose.yml restart <service_name>
+docker compose -f srcs/docker-compose.yml restart <service_name>
 
 # View logs for specific service
-docker-compose -f srcs/docker-compose.yml logs <service_name>
+docker compose -f srcs/docker-compose.yml logs <service_name>
 
 # Rebuild specific service
-docker-compose -f srcs/docker-compose.yml build --no-cache <service_name>
+docker compose -f srcs/docker-compose.yml build --no-cache <service_name>
 
 # Execute command in service
-docker-compose -f srcs/docker-compose.yml exec <service_name> <command>
+docker compose -f srcs/docker-compose.yml exec <service_name> <command>
 ```
 
 ### Accessing Containers
@@ -294,8 +312,8 @@ This creates named volumes that bind to specific host directories.
 docker volume ls
 
 # Inspect volume
-docker volume inspect db_data
-docker volume inspect wp_data
+docker volume inspect inception_db_data
+docker volume inspect inception_wp_data
 
 # Check volume usage
 du -sh /home/mkurkar/data/*
@@ -305,8 +323,7 @@ sudo tar -czf ~/backup-mysql-$(date +%Y%m%d).tar.gz -C /home/mkurkar/data mysql
 sudo tar -czf ~/backup-wordpress-$(date +%Y%m%d).tar.gz -C /home/mkurkar/data wordpress
 
 # Remove volumes (WARNING: deletes data)
-make down
-docker volume rm db_data wp_data
+make fclean
 ```
 
 ### Data Location
@@ -339,10 +356,10 @@ networks:
 docker network ls
 
 # Inspect inception network
-docker network inspect inception
+docker network inspect inception_inception
 
 # View network connections
-docker network inspect inception | grep -A 20 "Containers"
+docker network inspect inception_inception | grep -A 20 "Containers"
 
 # Test connectivity between containers
 docker exec wordpress ping -c 3 mariadb
@@ -432,15 +449,15 @@ pm.max_children = 5    # Maximum child processes
 - `MYSQL_USER` - Database user
 - `WP_URL` - WordPress site URL
 - `WP_TITLE` - Site title
-- `WP_ADMIN_USER` - Admin username
-- `WP_ADMIN_PASSWORD` - Admin password
+- `WP_ADMIN_USER` - Admin username (must NOT contain "admin/Admin/administrator")
 - `WP_ADMIN_EMAIL` - Admin email
 - `WP_USER` - Additional user
-- `WP_USER_PASSWORD` - User password
 - `WP_USER_EMAIL` - User email
 
-**Secrets:**
+**Secrets (mounted from `secrets/*.txt` via Docker secrets):**
 - `db_password` - Database password
+- `wp_admin_password` - WordPress admin password
+- `wp_user_password` - WordPress user password
 
 ### NGINX Service
 
@@ -537,7 +554,7 @@ RUN apt-get update && apt-get install -y \
 
 Rebuild:
 ```bash
-docker-compose -f srcs/docker-compose.yml build --no-cache wordpress
+docker compose -f srcs/docker-compose.yml build --no-cache wordpress
 make restart
 ```
 
@@ -633,17 +650,17 @@ services:
 Or run containers with debug commands:
 
 ```bash
-docker exec wordpress bash -c "tail -f /var/log/php7.4-fpm.log"
+docker logs -f wordpress
 ```
 
 ### Rebuilding Specific Service
 
 ```bash
 # Rebuild without cache
-docker-compose -f srcs/docker-compose.yml build --no-cache mariadb
+docker compose -f srcs/docker-compose.yml build --no-cache mariadb
 
 # Recreate container
-docker-compose -f srcs/docker-compose.yml up -d --force-recreate mariadb
+docker compose -f srcs/docker-compose.yml up -d --force-recreate mariadb
 ```
 
 ## Extending the Project
