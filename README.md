@@ -26,6 +26,12 @@ The entire infrastructure runs in isolated Docker containers with proper network
 
 ### Server Setup (fresh Debian)
 
+[![Download Debian 13.4.0](https://img.shields.io/badge/Download-Debian%2013.4.0%20(Trixie)-d70a53?style=for-the-badge&logo=debian&logoColor=white)](https://cdimage.debian.org/debian-cd/current/amd64/iso-cd/debian-13.4.0-amd64-netinst.iso)
+
+> Downloads the **netinstall ISO** (amd64, ~700 MB) — requires an internet connection during install.  
+> For an offline full ISO: [debian-13.4.0-amd64-DVD-1.iso](https://cdimage.debian.org/debian-cd/current/amd64/iso-dvd/debian-13.4.0-amd64-DVD-1.iso)  
+> All mirrors and architectures: [debian.org/distrib](https://www.debian.org/distrib/)
+
 If you are starting from a clean Debian installation, run the following steps before cloning the project.
 
 #### 1. Update the system
