@@ -8,19 +8,23 @@ DB_PASSWORD=$(cat /run/secrets/db_password)
 # First-run: initialise and configure the database
 if [ ! -d "/var/lib/mysql/mysql" ]; then
     echo "First run — initialising database..."
-    mysql_install_db --user=mysql --datadir=/var/lib/mysql
 
-    # Start MySQL temporarily with no auth and no networking
-    # --skip-grant-tables: bypass all authentication (safe because --skip-networking
-    #   disables TCP so no remote connections are possible during init)
-    mysqld --user=mysql --datadir=/var/lib/mysql \
-           --skip-grant-tables --skip-networking &
+    # --auth-root-authentication-method=normal makes root use mysql_native_password
+    # with no initial password, so we can connect as "mysql -u root" (no -p) below.
+    # Without this flag Debian's MariaDB defaults to unix_socket for root, which
+    # works for OS-root connections but ALTER USER / SET PASSWORD then flip it to
+    # unix_socket-based auth in ways that break subsequent container restarts.
+    mysql_install_db --user=mysql --datadir=/var/lib/mysql \
+        --auth-root-authentication-method=normal
+
+    # Start mysqld temporarily (normal mode, socket only — no TCP yet)
+    mysqld --user=mysql --datadir=/var/lib/mysql --skip-networking &
     MYSQL_PID=$!
 
-    # Wait for MySQL to be ready (socket only)
+    # Wait for the socket to become ready
     echo "Waiting for MySQL to start..."
     for i in {30..0}; do
-        if mysqladmin ping --silent; then
+        if mysqladmin ping --silent 2>/dev/null; then
             break
         fi
         sleep 1
@@ -33,25 +37,22 @@ if [ ! -d "/var/lib/mysql/mysql" ]; then
 
     echo "Configuring database..."
 
-    # With --skip-grant-tables all SQL runs without auth/privilege checks.
-    # Do NOT FLUSH PRIVILEGES before ALTER USER — that would re-enable auth
-    # mid-session and cause subsequent statements to fail.
-    # One FLUSH PRIVILEGES at the very end is sufficient.
+    # root has no password at this point (mysql_native_password, empty password)
     mysql -u root <<-EOSQL
         ALTER USER 'root'@'localhost' IDENTIFIED BY '${DB_ROOT_PASSWORD}';
         DELETE FROM mysql.user WHERE User='';
         DELETE FROM mysql.user WHERE User='root' AND Host NOT IN ('localhost', '127.0.0.1', '::1');
         DROP DATABASE IF EXISTS test;
-        DELETE FROM mysql.db WHERE Db='test' OR Db='test\_%';
-        CREATE DATABASE IF NOT EXISTS ${MYSQL_DATABASE};
+        DELETE FROM mysql.db WHERE Db='test' OR Db='test\\_%';
+        CREATE DATABASE IF NOT EXISTS \`${MYSQL_DATABASE}\`;
         CREATE USER IF NOT EXISTS '${MYSQL_USER}'@'%' IDENTIFIED BY '${DB_PASSWORD}';
-        GRANT ALL PRIVILEGES ON ${MYSQL_DATABASE}.* TO '${MYSQL_USER}'@'%';
+        GRANT ALL PRIVILEGES ON \`${MYSQL_DATABASE}\`.* TO '${MYSQL_USER}'@'%';
         FLUSH PRIVILEGES;
 EOSQL
 
     echo "Database configured successfully!"
 
-    # Shut down the temporary instance
+    # Shut down the temporary instance cleanly
     kill "${MYSQL_PID}"
     wait "${MYSQL_PID}" 2>/dev/null || true
     echo "Init complete."
