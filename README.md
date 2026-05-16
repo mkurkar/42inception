@@ -130,23 +130,21 @@ docker compose version
 
 ---
 
-### Prerequisites
+### Installing the Project
 
-- Docker Engine (CE) installed
-- Docker Compose v2 (`docker compose`)
-- Make utility
-- Root/sudo access for creating data directories
-- At least 2GB of free disk space
+Once your Debian system is set up and Docker is running, follow these steps.
 
-### Installation
+#### Step 1 — Clone the repository
 
-1. Clone this repository:
 ```bash
-git clone <repository-url>
-cd inception
+git clone https://github.com/mkurkar/42inception.git
+cd 42inception
 ```
 
-2. Create the secrets files (not committed to git):
+#### Step 2 — Create the secret files
+
+These files are never committed to git. Choose strong passwords.
+
 ```bash
 echo "your_root_db_password" > secrets/db_root_password.txt
 echo "your_db_password"      > secrets/db_password.txt
@@ -154,21 +152,90 @@ echo "your_wp_admin_pass"    > secrets/wp_admin_password.txt
 echo "your_wp_user_pass"     > secrets/wp_user_password.txt
 ```
 
-3. Copy and configure the environment file:
+> Keep `db_password` and `db_root_password` different from each other.  
+> The WordPress admin user is `mkurkar_wp` — the password in `wp_admin_password.txt` is what you use to log in to `/wp-admin`.
+
+#### Step 3 — Configure the environment file
+
 ```bash
 cp srcs/.env.sample srcs/.env
-# Edit srcs/.env if you need to change domain, usernames, or paths
 ```
 
-4. Add the domain to your hosts file:
+The defaults work out of the box. Open `srcs/.env` if you need to change the domain, usernames, data path, or WordPress title:
+
+```bash
+nano srcs/.env
+```
+
+Key variables:
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `DOMAIN_NAME` | `mkurkar.42.fr` | Domain served by NGINX |
+| `MYSQL_DATABASE` | `wordpress` | Database name |
+| `MYSQL_USER` | `wpuser` | Database user |
+| `WP_ADMIN_USER` | `mkurkar_wp` | WordPress admin login |
+| `WP_USER` | `mkurkar_user` | WordPress regular user |
+| `DATA_PATH` | `/home/mkurkar/data` | Host path for persistent volumes |
+
+#### Step 4 — Add the domain to your hosts file
+
 ```bash
 echo "127.0.0.1 mkurkar.42.fr" | sudo tee -a /etc/hosts
 ```
 
-5. Build and start the infrastructure:
+Verify it resolves:
+
+```bash
+ping -c1 mkurkar.42.fr
+# Should reply from 127.0.0.1
+```
+
+#### Step 5 — Build and start
+
 ```bash
 make
 ```
+
+This will:
+1. Create `/home/mkurkar/data/mysql` and `/home/mkurkar/data/wordpress` on the host
+2. Build the three Docker images (`mariadb`, `wordpress`, `nginx`) from source
+3. Start all containers in detached mode
+
+The first build takes a few minutes. MariaDB initialises the database, then WordPress downloads its core files and sets up the site automatically.
+
+#### Step 6 — Verify everything is running
+
+```bash
+make ps
+```
+
+All three containers should show `running` (or `healthy` for mariadb):
+
+```
+NAME        IMAGE       STATUS
+mariadb     mariadb     healthy
+wordpress   wordpress   running
+nginx       nginx       running
+```
+
+Check the logs if something looks wrong:
+
+```bash
+make logs
+# Ctrl+C to exit
+```
+
+#### Step 7 — Open the site
+
+Navigate to **https://mkurkar.42.fr** in your browser.
+
+> Your browser will warn about a self-signed certificate — this is expected. Accept the exception to proceed.
+
+- **WordPress site**: https://mkurkar.42.fr  
+- **Admin panel**: https://mkurkar.42.fr/wp-admin  
+  - Username: `mkurkar_wp`  
+  - Password: contents of `secrets/wp_admin_password.txt`
 
 ### Makefile Commands
 
